@@ -1,0 +1,162 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+import matplotlib.pyplot as plt
+
+def dealData(file,abs_,isscolar):
+    data = pd.read_excel(file)
+    #y的计算 △RON
+    if abs_:#绝对值
+        data.iloc[:,1]=data.iloc[:,0]-data.iloc[:,1]#绝对值
+    else:
+        data.iloc[:, 1] = (data.iloc[:, 0] - data.iloc[:, 1]) / data.iloc[:, 1]#相对值
+
+    print(data.shape)
+    data=data.iloc[:,1:]
+    print(data)
+
+    #清洗填充数据data.shape=(323, 367)
+    data[data==0] = np.nan
+    print(sum(data.iloc[:,1]==0))#判断y值是否有空值,0个
+    data = data.dropna(axis=1,thresh=200)#将在列的方向上250个及其以上的为NaN的列删除
+    data = data.dropna(axis=0,thresh=100)#将在行的方向上100个及其以上的为NaN的行删除
+    meann = data.mean()
+    data=data.fillna(data.mean())
+    print(data.shape)#(323, 352)
+
+    #根据拉依达准则（3σ准则）去除操作变量的异常值样本
+    n = data.shape[0]#行数
+    vi = data-meann
+    vi2 = np.power(vi.iloc[:,1:],2)
+    o = (vi2.sum()/(n-1))**0.5
+    data[abs(vi.iloc[:,1:])>3*o]=np.nan
+    data = data.dropna(axis=1,thresh=300)#将在列的方向上150个及其以上的为NaN的列删除
+    data = data.dropna(axis=0,thresh=270)#将在行的方向上100个及其以上的为NaN的行删除
+    meann2=data.mean()
+    data=data.fillna(data.mean())#异常值用平均值填充
+    print(data.shape)#(323, 351)
+
+    #数据归一化
+    print(data.shape)
+    minn=data.min()#每列最小值，默认按列
+    maxx=data.max()#每列最大值
+    data.iloc[:,1:]=(data.iloc[:,1:]-minn[1:])/(maxx[1:]-minn[1:])#归一化，没有对y进行归一化
+    print(data)
+    dellist=[]
+    #删除异常列（如：温度两个跨度很大的值）
+    for i in range(data.shape[1]):
+        if (sum(data.iloc[:,i]==0)>=100 or sum(data.iloc[:,i]==1)>=100):
+            print(i)
+            dellist.append(i)
+
+    if isscolar:
+        data.drop(data.columns[dellist],axis=1,inplace=True)
+        print(data.shape)#(323, 334)
+        #保存归一化数据为xlsx文件
+        data.to_excel('scaler_data.xlsx',index=False)
+    else:
+        #取消归一化
+        data.iloc[:,1:]=data.iloc[:,1:]*(maxx[1:]-minn[1:])+minn[1:]
+        data.drop(data.columns[dellist],axis=1,inplace=True)
+        print(data.shape)#(323, 334)
+
+        #保存common为xlsx文件
+        data.to_excel('common_data.xlsx',index=False)
+    return data
+
+def R2(file):
+    # 数据集
+    data = pd.read_excel(file)
+
+    y = data.iloc[:, 0]
+    x_all = data.iloc[:, 1:]
+    print('x_all', x_all.shape)
+    col_shape = x_all.shape[1]
+    R2 = []
+    for i in range(col_shape):
+        x = x_all.iloc[:, i]
+        train_x, test_x, train_y, test_y = train_test_split(x, y, train_size=0.8)
+        # reshape如果行数=-1的话可以使我们的数组所改的列数自动按照数组的大小形成新的数组
+        # 因为clt需要二维的数组来进行拟合但是这里只有一个特征所以需要reshape来转换为二维数组
+        train_x = train_x.values.reshape(-1, 1)
+        test_x = test_x.values.reshape(-1, 1)
+        clt = LinearRegression()
+        clt.fit(train_x, train_y)
+        pret_y = clt.predict(test_x)
+        R2.append(r2_score(test_y, pret_y))
+    print(R2)
+    print(len(R2))
+    np.savetxt('R2_333.txt', R2, fmt='%g', delimiter=',')
+    return R2
+
+def compareAMPC_R2(file):
+    AMPC_R2 = pd.read_excel(file, header=None)
+    print(AMPC_R2)
+    AMPC_sored = AMPC_R2.iloc[0:5, 0]
+    R2_sored = AMPC_R2.iloc[0:5, 2]
+    print(AMPC_sored)
+    data = pd.read_excel('common_data.xlsx')
+    y = data.iloc[:, 0]
+    x = data.iloc[:, 1:]
+    # _1第一名
+    plt.figure(figsize=(20, 8), dpi=80)
+    plt.subplot(1, 2, 1)
+    plt.title("AMPC_1")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.scatter(x.iloc[:, AMPC_sored[0]], y)
+
+    plt.subplot(1, 2, 2)
+    plt.title("R2_1")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.scatter(x.iloc[:, R2_sored[0]], y)
+    plt.show()
+
+    # _2
+    plt.figure(figsize=(20, 8), dpi=80)
+    plt.subplot(1, 2, 1)
+    plt.title("AMPC_2")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.scatter(x.iloc[:, AMPC_sored[1]], y)
+
+    plt.subplot(1, 2, 2)
+    plt.title("R2_2")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.scatter(x.iloc[:, R2_sored[1]], y)
+    plt.show()
+
+    # _3
+    plt.figure(figsize=(20, 8), dpi=80)
+    plt.subplot(1, 2, 1)
+    plt.title("AMPC_3")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.scatter(x.iloc[:, AMPC_sored[2]], y)
+
+    plt.subplot(1, 2, 2)
+    plt.title("R2_3")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.scatter(x.iloc[:, R2_sored[2]], y)
+    plt.show()
+
+if __name__=='__main__':
+#1数据预处理，删除空值，异常值等
+    #data=dealData("data.xlsx",abs_=0,isscolar=0)#abs_表示y值是否为绝对RON;isscolar输出的文件是否归一化
+
+#2.1计算各列的AMPC值和R值
+    #2.1.1 AMPC的计算：把1输出的数据文件带入matlab里面陈劲师兄写的AMPC计算,手动导入数据到pycharm中
+    #2.1.2 R2的计算
+    #R2(file=r'C:\Users\CJ\PycharmProjects\pythonProject\汽油数学建模\common_data.xlsx')
+    #2.1.3手动给两个指标排序，生成AMPC_R2排序比较.xlsx文件
+#2.2AMPC_R值的比较
+    #compareAMPC_R2(file='AMPC_R2排序比较.xlsx')
+#3用随机数计算AMPC的阙值，并删除小于AMPC得分小于阙值的列（因为可判断为该列与y随机）
+    #3.1随机生成10000个随机x和y,带入AMPC计算阙值
+    data=np.random.random([323,20000])
+    np.savetxt('quezhi10000.csv',data,fmt='%g',delimiter=',')
